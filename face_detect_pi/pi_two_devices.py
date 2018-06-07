@@ -266,11 +266,17 @@ def folder_input(input_dir):
 
 try:
     from picamera.array import PiRGBArray
-    from picamera import PiCamera                     
+    from picamera import PiCamera
+    import time           
 except ImportError:
     print ("Pip install picamera.array and picamera before using pi + camera as input")
     folder_input(input_dir)
     sys.exit(0)
+
+# Cycles per second = number of processing loops per second.
+cps = 0
+cps_values = list()
+cps_n_values = 20
 
 # initialize the camera and grab a reference to the raw camera capture
 camera = PiCamera()
@@ -279,6 +285,9 @@ camera.framerate = 32
 rawCapture = PiRGBArray(camera, size=(640, 480))
 
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    # Time this loop to get cycles per second
+    start = time.time()
+
     # grab the raw NumPy array representing the image, then initialize the timestamp
     # and occupied/unoccupied text
     image = frame.array
@@ -288,11 +297,25 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
         # draw bounding box for the face
         cv2.rectangle(
             image, (rect[0], rect[1]), (rect[0] + rect[2], rect[1]+rect[3]), (255, 0, 0))
+    
+    # Compute the time for this loop and estimate CPS as a running average
+    end = time.time()
+    duration = end - start
+    fps = int(1.0 / duration)
+    cps_values.append(fps)
+    if len(cps_values) > cps_n_values:
+        cps_values.pop(0)
+    cps = int(sum(cps_values) / len(cps_values))
+    cv2.putText(image, "CPS: " + str(cps), (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0))
+
     # show the frame
     cv2.imshow("Frame", image)
-    key = cv2.waitKey(1) & 0xFF
+    
     # clear the stream in preparation for the next frame
     rawCapture.truncate(0)
+
+    key = cv2.waitKey(1) & 0xFF
     # if the `q` key was pressed, break from the loop
     if key == ord("q"):
         break
